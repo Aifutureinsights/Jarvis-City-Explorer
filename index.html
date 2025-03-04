@@ -1,84 +1,189 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <script src="https://cesium.com/downloads/cesiumjs/releases/1.107/Build/Cesium/Cesium.js"></script>
-    <link href="https://cesium.com/downloads/cesiumjs/releases/1.107/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-  </head>
-  <body>
-    <!-- Search Box -->
-    <input type="text" id="cityInput" placeholder="Say a city name..." style="width:80%; margin:20px;">
-    <button onclick="startVoiceSearch()" style="padding:10px;">🎤</button>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jarvis City Explorer</title>
 
-    <!-- 3D Globe Container -->
+  <!-- Orbitron Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500&display=swap" rel="stylesheet">
+
+  <!-- CesiumJS Library -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+  <!-- Jarvis Sound Effect -->
+  <audio id="jarvisSound">
+    <source src="https://assets.mixkit.co/active_storage/sfx/92/92-preview.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- CSS for Iron Man HUD Theme -->
+  <style>
+    /* Jarvis HUD Theme */
+    body {
+      background: linear-gradient(to bottom, #000000, #00172d);
+      color: #00f7ff; /* Cyan glow */
+      font-family: 'Orbitron', sans-serif; /* Futuristic font */
+      margin: 0;
+      overflow: hidden;
+    }
+
+    /* Holographic Globe */
+    #cesiumContainer {
+      border: 2px solid rgba(0, 247, 255, 0.3);
+      border-radius: 10px;
+      box-shadow: 0 0 50px rgba(0, 247, 255, 0.2);
+      margin: 10px;
+    }
+
+    /* Jarvis Voice Interface */
+    #jarvisResponse {
+      background: rgba(0, 15, 30, 0.9);
+      border: 1px solid #00f7ff;
+      padding: 15px;
+      margin: 20px;
+      border-radius: 5px;
+      animation: pulse 2s infinite;
+    }
+
+    /* Search Box (HUD Style) */
+    input, button {
+      background: rgba(0, 30, 60, 0.8);
+      border: 1px solid #00f7ff;
+      color: #00f7ff;
+      padding: 10px;
+      margin: 10px;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    button:hover {
+      background: #001f4d;
+      transform: scale(1.05);
+      box-shadow: 0 0 15px #00f7ff;
+    }
+
+    /* Scanlines Overlay (Hologram Effect) */
+    body::after {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 247, 255, 0.05) 0px,
+        rgba(0, 247, 255, 0.05) 2px,
+        transparent 2px,
+        transparent 4px
+      );
+      pointer-events: none;
+    }
+
+    /* Animations */
+    @keyframes pulse {
+      0% { opacity: 0.8; }
+      50% { opacity: 1; box-shadow: 0 0 20px #00f7ff; }
+      100% { opacity: 0.8; }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Loading Screen -->
+  <div id="loading" style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center;">
+    <img src="https://cdn-icons-png.flaticon.com/512/1829/1829217.png" style="width:40px; animation: spin 1s linear infinite;">
+    <span style="margin-left:10px; font-size:20px;">INITIALIZING J.A.R.V.I.S...</span>
+  </div>
+
+  <!-- App Interface -->
+  <div style="display:none;" id="app">
+    <input type="text" id="cityInput" placeholder="Enter a city or landmark...">
+    <button onclick="exploreCity()">Explore</button>
     <div id="cesiumContainer" style="width: 100%; height: 80vh;"></div>
+    <div id="jarvisResponse">Jarvis is ready to assist you.</div>
+  </div>
 
-    <!-- Jarvis AI Chat -->
-    <div style="margin:20px;">
-      <input type="text" id="question" placeholder="Ask Jarvis...">
-      <button onclick="askJarvis()">Ask</button>
-      <div id="jarvisResponse" style="color:white; background:black; padding:10px;"></div>
-    </div>
+  <!-- JavaScript -->
+  <script>
+    // Show loading screen
+    document.getElementById('loading').style.display = 'flex';
 
-    <script>
-      // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwMDE5YTEwZC1iNTVkLTQ4OGYtOTc3OC00MzE5Yjg5NmE4NzAiLCJpZCI6MjgwODMyLCJpYXQiOjE3NDEwNjI5ODZ9.iloUgXjce5imqTeHB476HiFju-gedspGYDqM9DJOaxw
+    // Initialize Cesium Globe
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      terrainProvider: Cesium.createWorldTerrain(),
+      animation: false,
+      timeline: false,
+      fullscreenButton: false,
+    });
 
-      const viewer = new Cesium.Viewer('cesiumContainer', {
-        terrainProvider: Cesium.createWorldTerrain(),
-        skyBox: Cesium.SkyBox.fromStars(),
-        timeline: false,
-        animation: false
+    // Hide loading screen after initialization
+    viewer.initializedPromise.then(() => {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+    });
+
+    // Play Jarvis Sound
+    function playJarvisSound() {
+      document.getElementById('jarvisSound').play();
+    }
+
+    // Explore City Function
+    async function exploreCity() {
+      const city = document.getElementById('cityInput').value.trim();
+      if (!city) {
+        alert("Please enter a city or landmark.");
+        return;
+      }
+
+      playJarvisSound(); // Play sound effect
+
+      // Simulate fetching data (replace with real API calls later)
+      const mockData = {
+        "New York": { lon: -74.006, lat: 40.7128, landmarks: ["Statue of Liberty", "Times Square"] },
+        "Paris": { lon: 2.3522, lat: 48.8566, landmarks: ["Eiffel Tower", "Louvre Museum"] },
+      };
+
+      const cityData = mockData[city];
+      if (!cityData) {
+        document.getElementById('jarvisResponse').innerText = "City not found. Please try again.";
+        return;
+      }
+
+      // Fly to the city
+      viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(cityData.lon, cityData.lat, 500000),
       });
 
-      // Voice Search
-      function startVoiceSearch() {
-        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-        recognition.lang = 'en-US';
-        
-        recognition.onresult = (event) => {
-          const city = event.results[0][0].transcript;
-          document.getElementById('cityInput').value = city;
-          flyToCity(city);
-        };
-        
-        recognition.start();
-      }
-
-      // Fly to City
-      function flyToCity(city) {
-        fetch(`https://cors-anywhere.herokuapp.com/https://nominatim.openstreetmap.org/search?q=${city}&format=json`)
-          .then(response => response.json())
-          .then(data => {
-            const lon = parseFloat(data[0].lon);
-            const lat = parseFloat(data[0].lat);
-            viewer.camera.flyTo({
-              destination: Cesium.Cartesian3.fromDegrees(lon, lat, 100000),
-              duration: 3
-            });
-          });
-      }
-
-      // AI Guide (GPT-2)
-      async function askJarvis() {
-        const question = document.getElementById('question').value;
-        const response = await generateResponse(question);
-        document.getElementById('jarvisResponse').innerText = response;
-      }
-
-      async function generateResponse(question) {
-        const pipeline = await transformers.pipeline('text-generation', 'gpt2');
-        const result = await pipeline(question, { max_length: 50 });
-        return result[0].generated_text;
-      }
-
-      // Add Landmark (Example: Eiffel Tower)
-      viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(2.2945, 48.8584),
-        model: {
-          uri: 'eiffel_tower.glb', // Make sure this file is uploaded!
-          scale: 0.5
-        }
+      // Add landmarks
+      cityData.landmarks.forEach((landmark, index) => {
+        const offsetLon = cityData.lon + (index * 0.02); // Offset for visibility
+        viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(offsetLon, cityData.lat),
+          billboard: {
+            image: 'https://cdn-icons-png.flaticon.com/512/1829/1829217.png',
+            scale: 0.2,
+            color: Cesium.Color.CYAN,
+            verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+          },
+          label: {
+            text: landmark,
+            font: '20px Orbitron',
+            fillColor: Cesium.Color.CYAN,
+            outlineColor: Cesium.Color.BLACK,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE
+          }
+        });
       });
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers"></script>
-  </body>
+
+      // Jarvis Response
+      document.getElementById('jarvisResponse').innerText = `Exploring ${city}. Landmarks added to the map.`;
+    }
+  </script>
+</body>
 </html>
