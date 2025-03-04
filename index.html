@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.107/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.107/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Search Box -->
+    <input type="text" id="cityInput" placeholder="Say a city name..." style="width:80%; margin:20px;">
+    <button onclick="startVoiceSearch()" style="padding:10px;">🎤</button>
+
+    <!-- 3D Globe Container -->
+    <div id="cesiumContainer" style="width: 100%; height: 80vh;"></div>
+
+    <!-- Jarvis AI Chat -->
+    <div style="margin:20px;">
+      <input type="text" id="question" placeholder="Ask Jarvis...">
+      <button onclick="askJarvis()">Ask</button>
+      <div id="jarvisResponse" style="color:white; background:black; padding:10px;"></div>
+    </div>
+
+    <script>
+      // eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIwMDE5YTEwZC1iNTVkLTQ4OGYtOTc3OC00MzE5Yjg5NmE4NzAiLCJpZCI6MjgwODMyLCJpYXQiOjE3NDEwNjI5ODZ9.iloUgXjce5imqTeHB476HiFju-gedspGYDqM9DJOaxw
+
+      const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrainProvider: Cesium.createWorldTerrain(),
+        skyBox: Cesium.SkyBox.fromStars(),
+        timeline: false,
+        animation: false
+      });
+
+      // Voice Search
+      function startVoiceSearch() {
+        const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = 'en-US';
+        
+        recognition.onresult = (event) => {
+          const city = event.results[0][0].transcript;
+          document.getElementById('cityInput').value = city;
+          flyToCity(city);
+        };
+        
+        recognition.start();
+      }
+
+      // Fly to City
+      function flyToCity(city) {
+        fetch(`https://cors-anywhere.herokuapp.com/https://nominatim.openstreetmap.org/search?q=${city}&format=json`)
+          .then(response => response.json())
+          .then(data => {
+            const lon = parseFloat(data[0].lon);
+            const lat = parseFloat(data[0].lat);
+            viewer.camera.flyTo({
+              destination: Cesium.Cartesian3.fromDegrees(lon, lat, 100000),
+              duration: 3
+            });
+          });
+      }
+
+      // AI Guide (GPT-2)
+      async function askJarvis() {
+        const question = document.getElementById('question').value;
+        const response = await generateResponse(question);
+        document.getElementById('jarvisResponse').innerText = response;
+      }
+
+      async function generateResponse(question) {
+        const pipeline = await transformers.pipeline('text-generation', 'gpt2');
+        const result = await pipeline(question, { max_length: 50 });
+        return result[0].generated_text;
+      }
+
+      // Add Landmark (Example: Eiffel Tower)
+      viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(2.2945, 48.8584),
+        model: {
+          uri: 'eiffel_tower.glb', // Make sure this file is uploaded!
+          scale: 0.5
+        }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@huggingface/transformers"></script>
+  </body>
+</html>
